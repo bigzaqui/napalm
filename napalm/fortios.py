@@ -246,10 +246,58 @@ class FortiOSDriver(NetworkDriver):
     def get_lldp_neighbors(self):
         return {}
 
+    def get_environment(self):
 
-        # def get_environment(self):
-        #     sensors_output = self.device.execute_command('execute sensor list')
-        #     from pprint import pprint
-        #     pprint(sensors_output)
-        #
-        #     return {}
+        # remove extra spaces, convert to low
+        def parse_string(line):
+            return re.sub(' +', ' ', line.lower())
+
+        out = dict(fans={}, temperature={}, power={}, cpu={}, memory={})
+        sensors_list = [parse_string(x) for x in self.device.execute_command('execute sensor list')]
+
+        # temp
+        temp_lines = [x for x in sensors_list if any([True for y in ['dts', 'temp', 'adt7490'] if y in x])]
+
+        for temp_line in temp_lines:
+            if 'disabled' in temp_line:
+                m = re.search("(.+?) (.+?) alarm=(.+?) \(scanning disabled\)", temp_line)
+                out['temperature'][m.group(2)] = False
+                continue
+
+            m = re.search("(.+?) (.+?) alarm=(.+?) value=(.+?) threshold_status=(.+?)", temp_line)
+            out['temperature'][m.group(2)] = True
+
+
+        if False:
+
+            # Fans
+            #
+            fan_lines = [x for x in sensors_list if 'fan' in x and 'temp' not in x]
+            for fan_line in fan_lines:
+                if 'disabled' in fan_line:
+                    m = re.search("(.+?) (.+?) alarm=(.+?) \(scanning disabled\)", fan_line)
+                    out['fans'][m.group(2)] = False
+                    continue
+
+                m = re.search("(.+?) (.+?) alarm=(.+?) value=(.+?) threshold_status=(.+?)", fan_line)
+                out['fans'][m.group(2)] = True
+
+
+            # cpu
+            cpus = [x for x in self.device.execute_command('get system performance status | grep CPU')[1:] if x]
+            cpus_dict = dict()
+            for l in cpus:
+                m = re.search('(.+?) states: (.+?)% user (.+?)% system (.+?)% nice (.+?)% idle', l)
+                cpuname = m.group(1)
+                idle = m.group(5)
+                cpus_dict[cpuname] = 100 - int(idle)
+            out['cpus'] = cpus_dict
+
+            # memory
+            memory_command = 'diag hard sys mem | grep Mem:'
+            t = [x for x in re.split('\s+', self.device.execute_command(memory_command)[0]) if x]
+            total, used = int(t[1]) >> 20, int(t[2]) >> 20  # convert from byte to MB
+            out['memory']['available_ram'] = total
+            out['memory']['used_ram'] = used
+
+        return out
