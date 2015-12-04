@@ -302,13 +302,13 @@ class FortiOSDriver(NetworkDriver):
             return output
 
         def get_cpu(cpu_lines):
-            cpus_dict = dict()
+            output = dict()
             for l in cpu_lines:
                 m = re.search('(.+?) states: (.+?)% user (.+?)% system (.+?)% nice (.+?)% idle', l)
                 cpuname = m.group(1)
                 idle = m.group(5)
-                cpus_dict[cpuname] = 100 - int(idle)
-            return cpus_dict
+                output[cpuname] = 100 - int(idle)
+            return output
 
         def get_memory(memory_line):
             total, used = int(memory_line[1]) >> 20, int(memory_line[2]) >> 20  # convert from byte to MB
@@ -318,23 +318,23 @@ class FortiOSDriver(NetworkDriver):
             output = dict()
             for temp_line in temperature_lines:
                 if 'disabled' in temp_line:
-                    name = search_disabled(temp_line)
-                    output[name] = {'is_alert': False, 'is_critical': False, 'temperature': 0.0}
+                    sensor_name = search_disabled(temp_line)
+                    output[sensor_name] = {'is_alert': False, 'is_critical': False, 'temperature': 0.0}
                     continue
 
                 m = search_normal(temp_line)
-                name, temp_value, status = m.group(2), m.group(4), int(m.group(5))
+                sensor_name, temp_value, status = m.group(2), m.group(4), int(m.group(5))
                 is_alert = True if status == 1 else False
 
                 # find block
-                fullline = self._search_line_in_lines(name, detail_block)
+                fullline = self._search_line_in_lines(sensor_name, detail_block)
                 index_line = detail_block.index(fullline)
-                block = detail_block[index_line:]
+                sensor_block = detail_block[index_line:]
 
-                v = int(self._search_line_in_lines('upper_non_recoverable', block).split('=')[1])
+                v = int(self._search_line_in_lines('upper_non_recoverable', sensor_block).split('=')[1])
 
-                output[name] = dict(temperature=float(temp_value), is_alert=is_alert,
-                                    is_critical=True if v > temp_value else False)
+                output[sensor_name] = dict(temperature=float(temp_value), is_alert=is_alert,
+                                           is_critical=True if v > temp_value else False)
 
             return output
 
@@ -362,7 +362,6 @@ class FortiOSDriver(NetworkDriver):
         # power, not implemented
         sensors = [x.split()[1] for x in sensors_block if x.split()[0].isdigit()]
         psus = {x for x in sensors if x.startswith('ps')}
-        x = {t: {'status': True, 'capacity': -1.0, 'output': -1.0} for t in psus}
-        out['power'] = x
+        out['power'] = {t: {'status': True, 'capacity': -1.0, 'output': -1.0} for t in psus}
 
         return out
