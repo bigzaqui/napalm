@@ -294,11 +294,11 @@ class FortiOSDriver(NetworkDriver):
             for fan_line in fan_lines:
                 if 'disabled' in fan_line:
                     name = search_disabled(fan_line)
-                    output[name] = False
+                    output[name] = dict(status=False)
                     continue
 
                 m = search_normal(fan_line)
-                output[m.group(2)] = True
+                output[m.group(2)] = dict(status=True)
             return output
 
         def get_cpu(cpu_lines):
@@ -319,7 +319,7 @@ class FortiOSDriver(NetworkDriver):
             for temp_line in temperature_lines:
                 if 'disabled' in temp_line:
                     name = search_disabled(temp_line)
-                    output[name] = {'is_alert': False, 'is_critical': False, 'temperature': 0}
+                    output[name] = {'is_alert': False, 'is_critical': False, 'temperature': 0.0}
                     continue
 
                 m = search_normal(temp_line)
@@ -333,7 +333,7 @@ class FortiOSDriver(NetworkDriver):
 
                 v = int(self._search_line_in_lines('upper_non_recoverable', block).split('=')[1])
 
-                output[name] = dict(temperature=temp_value, is_alert=is_alert,
+                output[name] = dict(temperature=float(temp_value), is_alert=is_alert,
                                     is_critical=True if v > temp_value else False)
 
             return output
@@ -362,7 +362,7 @@ class FortiOSDriver(NetworkDriver):
         # power, not implemented
         sensors = [x.split()[1] for x in sensors_block if x.split()[0].isdigit()]
         psus = {x for x in sensors if x.startswith('ps')}
-        x = {t: {'status': True, 'capacity': -1, 'output': -1} for t in psus}
+        x = {t: {'status': True, 'capacity': -1.0, 'output': -1.0} for t in psus}
         out['power'] = x
 
         return out
